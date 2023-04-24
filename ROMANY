@@ -1,0 +1,382 @@
+
+1from selenium import webdriver
+2
+import csv
+3
+from selenium.webdriver.support.wait import WebDriverWait
+4
+from selenium.webdriver.support import expected_conditions as EC
+5
+from selenium.webdriver.common.by import By
+6
+from selenium.webdriver.support.ui import WebDriverWait as wait
+7
+from selenium.webdriver.common.action_chains import ActionChains
+8
+import time
+9
+import ConfigParser
+10
+from time import sleep
+11
+from selenium.webdriver.chrome.options import Options
+12
+​
+13
+options = Options()
+14
+options.add_argument('--disable-gpu')
+15
+options.add_argument('--headless')
+16
+browser = webdriver.Chrome()
+17
+​
+18
+#1xbet login xpaths
+19
+xPathLogin = '//*[@id="loginout"]/div[2]/div/div/div[1]/span[1]'
+20
+xPathEmail =  '//*[@id="userLogin"]'
+21
+xPathPassword = '//*[@id="userPassword"]'
+22
+xPathSubmitLogin = '//*[@id="userConButton"]'
+23
+​
+24
+#1xbet login successful confirmation xpath
+25
+xPathMyAccount = '//*[@id="user-money"]/div/div/a/div/p[1]'
+26
+​
+27
+#1xbet currency confirmation xpath
+28
+xPathConfirmCurrency = '//*[@id="approve_accept"]'
+29
+​
+30
+#Baccarat navigation xpaths
+31
+xPathIframe = '//*[@id="game-iframe"]'
+32
+xPathBaccart = '//div[@data-game="baccarat"]'
+33
+xPathIframeGame = '//*[@id="container"]/div/div/iframe'
+34
+xPathSpeedBaccartB = '//div[@data-tableid="lv2kzclunt2qnxo5"]'
+35
+​
+36
+#Baccarat game status xpaths
+37
+xPathPlaceBets = '//*[@id="root"]/div/div[1]/div/div/div[6]/div[3]/div/div[1]/div/div/div[contains(string(), "PLACE YOUR BETS")]'
+38
+xPathPlayerWon = '//*[@id="root"]/div/div[1]/div/div/div[6]/div[3]/div/div[1]/div/div/div[contains(string(), "PLAYER WINS")]'
+39
+xPathBankWon = '//*[@id="root"]/div/div[1]/div/div/div[6]/div[3]/div/div[1]/div/div/div[contains(string(), "BANKER WINS")]'
+40
+xPathTie = '//*[@id="root"]/div/div[1]/div/div/div[6]/div[3]/div/div[1]/div/div/div[contains(string(), "TIE")]'
+41
+xPathPlayerBankTie = xPathPlayerWon + '|' + xPathBankWon + '|' + xPathTie
+42
+xPathWaitForNextGame = '//*[@id="root"]/div/div[1]/div/div/div[6]/div[3]/div/div[1]/div/div/div[contains(string(), "WAIT FOR NEXT GAME")]'
+43
+​
+44
+#Baccarat bet placing xpaths
+45
+xPath1Dollar = '//*[@id="root"]/div/div[1]/div/div/div[6]/div[3]/div/div[3]/div/div/div/div[1]/div/ul/li[2][div/span[contains(text(), "$ 1")]]'
+46
+xPathDouble = '//*[@id="root"]/div/div[1]/div/div/div[6]/div[3]/div/div[3]/div/div/div/div[1]/div/ul/li[button/span[contains(text(), "DOUBLE")]]'
+47
+xPathPlayerSubmit = '//*[@id="root"]/div/div[1]/div/div/div[6]/div[3]/div/div[2]/div/div/div/div[1]/div[1][contains(@class, "player--3F1-C")]'
+48
+xPathBankSubmit = '//*[@id="root"]/div/div[1]/div/div/div[6]/div[3]/div/div[2]/div/div/div/div[1]/div[2][contains(@class, "banker--11HzV")]'
+49
+​
+50
+#load configurations from  config.ini 
+51
+config = ConfigParser.ConfigParser()
+52
+config.read("config.ini")
+53
+email = config.get('LoginCredentials', 'Email')
+54
+password = config.get('LoginCredentials', 'Password')
+55
+sequence = config.get('BotConfig', 'BetPattern').split(",")
+56
+betInitial = int(config.get('BotConfig', 'InitialBet'))
+57
+betUpperLimit = int(config.get('BotConfig', 'upperLimit'))
+58
+​
+59
+length = len(sequence)
+60
+headers = ['Round','Player/Bank','Amount','Double','Result']
+61
+​
+62
+def getFileName():
+63
+    ts = time.time()
+64
+    return 'betting-results-' + str(ts) + '.csv'
+65
+​
+66
+filename = getFileName()
+67
+outfile  = open(filename, "wb")
+68
+writer = csv.writer(outfile, delimiter=',', quotechar='', quoting=csv.QUOTE_NONE)
+69
+writer.writerow(headers)
+70
+​
+71
+#initial values
+72
+​
+73
+print '===Betting bot has been initialized with the following values==='
+74
+print 'Betting Sequence:',sequence
+75
+print 'Initial Bet:', betInitial, '$'
+76
+print 'Bet limit:', betUpperLimit, '$'
+77
+​
+78
+def placeInitialBet(xpathSubmit):
+79
+    for i in range(betInitial):
+80
+        browser.find_elements_by_xpath(xpathSubmit)[0].click()
+81
+​
+82
+def doubleBets(d):
+83
+    for i in range(d):
+84
+            browser.find_elements_by_xpath(xPathDouble)[0].click()  
+85
+    
+86
+#utility functions
+87
+def placeBets(d, selection):
+88
+    xpathSubmit = xPathPlayerSubmit if selection == 'P' else xPathBankSubmit
+89
+    WebDriverWait(browser, 60).until(EC.element_to_be_clickable((By.XPATH, xPath1Dollar)))
+90
+    browser.find_elements_by_xpath(xPath1Dollar)[0].click()
+91
+    WebDriverWait(browser, 60).until(EC.element_to_be_clickable((By.XPATH, xpathSubmit)))
+92
+    placeInitialBet(xpathSubmit)
+93
+    WebDriverWait(browser, 60).until(EC.element_to_be_clickable((By.XPATH, xPathDouble)))
+94
+    doubleBets(d)
+95
+    print 'Bet submitted'
+96
+​
+97
+def getBetAmount(double):
+98
+    currentBet = betInitial
+99
+    for i in range(double):
+100
+        currentBet *= 2
+101
+    if currentBet < betUpperLimit:
+102
+        return currentBet, double
+103
+    else:
+104
+        return betInitial, 0
+105
+​
+106
+def startPlaying(double,count):
+107
+    WebDriverWait(browser, 60).until(EC.element_to_be_clickable((By.XPATH, xPathWaitForNextGame)))
+108
+    print 'Waiting to place bets..'
+109
+    result = 'won'
+110
+    try:
+111
+        while True:
+112
+            print '===================Round ' + str(count+1) + '==================='
+113
+            index = count%length
+114
+            selection = sequence[index].strip()
+115
+            selectionText = 'PLAYER WINS' if selection == 'P' else 'BANKER WINS'
+116
+            amount,double = getBetAmount(double)
+117
+            currDouble = double
+118
+            WebDriverWait(browser, 60).until(EC.element_to_be_clickable((By.XPATH, xPathPlaceBets)))
+119
+            print 'Bet to be placed for:', selection
+120
+            print 'Initial bet:', betInitial, '$'
+121
+            print 'Double:', currDouble, 'x'
+122
+            print 'Bet amount:', amount, '$'
+123
+            placeBets(double, selection)
+124
+        
+125
+            WebDriverWait(browser, 60).until(EC.presence_of_element_located((By.XPATH, xPathPlayerBankTie)))
+126
+            playertext = None if len(browser.find_elements_by_xpath(xPathPlayerWon)) == 0 else   browser.find_elements_by_xpath(xPathPlayerWon)[0].text
+127
+            banktext = None if len(browser.find_elements_by_xpath(xPathBankWon)) == 0 else browser.find_elements_by_xpath(xPathBankWon)[0].text
+128
+            if playertext:
+129
+                if playertext == selectionText:
+130
+                    print 'Congrats. Player won'
+131
+                    double = 0
+132
+                    result = 'won'
+133
+                else:
+134
+                    print 'Oops. Player won'
+135
+                    double += 1
+136
+                    result = 'loss'
+137
+            elif banktext:
+138
+                if banktext == selectionText:
+139
+                    print 'Congrats. Bank won'
+140
+                    double = 0
+141
+                    result = 'won'
+142
+                else:
+143
+                    print 'Oops. Bank won'
+144
+                    double += 1
+145
+                    result = 'loss'
+146
+            else:
+147
+                print 'Tied.'
+148
+                result = 'tied'
+149
+            count += 1
+150
+            result = [(count),selection,amount,str(currDouble) + 'x',result]
+151
+            writer.writerow(result)
+152
+    except KeyboardInterrupt:
+153
+            print('Session ended.')
+154
+    except Exception,e: 
+155
+        print e
+156
+        print 'Something went wrong. Reloading the game..'
+157
+        navigateToBaccarat(double,count)
+158
+​
+159
+def navigateToBaccarat(double,count):
+160
+    browser.get('https://1xbet.com/en/tvgames/show/livecasino?casino=livecasinoevolution&game=18335')
+161
+    browser.find_elements_by_xpath(xPathConfirmCurrency)[0].click()
+162
+​
+163
+    WebDriverWait(browser, 10).until(EC.presence_of_element_located((By.XPATH, xPathIframe)))
+164
+    iframe = browser.find_element_by_xpath(xPathIframe)
+165
+    browser.switch_to.frame(iframe)
+166
+    WebDriverWait(browser, 20).until(EC.element_to_be_clickable((By.XPATH, xPathBaccart)))
+167
+    browser.find_elements_by_xpath(xPathBaccart)[0].click()
+168
+    WebDriverWait(browser, 20).until(EC.presence_of_element_located((By.XPATH, xPathSpeedBaccartB)))
+169
+    browser.find_elements_by_xpath(xPathSpeedBaccartB)[0].click()
+170
+​
+171
+    WebDriverWait(browser, 20).until(EC.presence_of_element_located((By.XPATH, xPathIframeGame)))
+172
+    iframeGame = browser.find_element_by_xpath(xPathIframeGame)
+173
+    browser.switch_to.frame(iframeGame)
+174
+    startPlaying(double,count)
+175
+​
+176
+def login():
+177
+    browser.find_elements_by_xpath(xPathLogin)[0].click()
+178
+    usernameEl = browser.find_elements_by_xpath(xPathEmail)[0]
+179
+    passwordEl = browser.find_elements_by_xpath(xPathPassword)[0]
+180
+    usernameEl.send_keys(email)
+181
+    passwordEl.send_keys(password)
+182
+    browser.find_elements_by_xpath(xPathSubmitLogin)[0].click()
+183
+    WebDriverWait(browser, 60).until(EC.presence_of_element_located((By.XPATH, xPathMyAccount)))
+184
+    double = 0
+185
+    count = 0
+186
+    navigateToBaccarat(double,count)
+187
+​
+188
+# navigate to login page
+189
+url = 'https://1xbet.com/en/'
+190
+browser.get(url)
+191
+login()
